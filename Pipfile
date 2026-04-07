@@ -2,14 +2,14 @@
 url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
- 
+
 [packages]
-django = "*"
+django = ">=5.1"
 djangorestframework = "*"
 djangorestframework-xml = "*"
 djoser = "*"
- 
+
 [dev-packages]
- 
+
 [requires]
-python_version = "3.9"
+python_version = "3.14"

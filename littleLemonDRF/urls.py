@@ -1,6 +1,6 @@
 from django.urls import path
-from .models import views
+from . import views
 
 urlpatterns = [
-    path('ratings', views.RatingsView.as_view()),
+    path('menu', views.menu, name="menu"),
 ]

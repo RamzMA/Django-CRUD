@@ -29,6 +29,19 @@ def menu(request):
         return JsonResponse(model_to_dict(menu), status=201)
     
 @api_view()
+def menu_items(request):
+    items = Menu.objects.select_related('category').all()
+    serialized_item = MenuItemSerializer(items, many=True)
+    return Response(serialized_item.data)
+
+@api_view()
+def single_item(request, id):
+    items = get_object_or_404(Menu, pk = id)
+    serialized_item = MenuItemSerializer(items)
+    return Response(serialized_item.data)
+
+    
+@api_view()
 def category_detail(request,pk):
     category = get_object_or_404(Category, pk=pk)
     serialized_category = CategorySerializer(category)

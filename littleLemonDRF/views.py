@@ -1,11 +1,12 @@
 from .models import Category, MenuItem, Cart, Order, OrderItem
-from .serializers import CategorySerializer, MenuItemSerializer, CartSerializer, OrderItemSerializer, OrderSerializer
+from .serializers import CategorySerializer, MenuItemSerializer, CartSerializer, OrderItemSerializer, OrderSerializer, UserSerializer
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from datetime import date
-
+from django.contrib.auth.models import User,Group
+from rest_framework.decorators import api_view, permission_classes
 
 """
     Generics: allows for prebuilt GET,POST,EDIT,DELETE with LIST,CREATE,UPDATE,DELETE view
@@ -195,3 +196,80 @@ class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
             return Response({'message': 'Forbidden'}, status=403)
         return super().delete(request, *args, **kwargs)
 
+#Adding managers and delivery crew
+"""
+    managers: Handles GET and POST for manager group
+        - GET: Returns list of all managers (admin only)
+        - POST: Adds a user to the manager group by username (admin only)
+        - get_object_or_404: If user doesnt exist returns 404 automatically
+        - group.user_set.add(user): Django's built in way to add user to a group
+
+    manager_detail: Handles DELETE for manager group
+        - Removes a user from the manager group by their ID
+        - group.user_set.remove(user): Django's built in way to remove user from group
+"""
+@api_view(['GET', 'POST'])
+@permission_classes([IsAdminUser])
+def managers(request):
+    manager_group = Group.objects.get(name='Manager')
+
+    if request.method == 'GET':
+        managers = User.objects.filter(groups=manager_group)
+        serializer = UserSerializer(managers, many=True)
+        return Response(serializer.data)
+
+    if request.method == 'POST':
+        username = request.data.get('username')
+        user = get_object_or_404(User, username=username)
+        manager_group.user_set.add(user)
+        return Response({'message': f'{username} added to Manager group'}, status=201)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAdminUser])
+def manager_detail(request, pk):
+    user = get_object_or_404(User, pk=pk)
+    manager_group = Group.objects.get(name='Manager')
+    manager_group.user_set.remove(user)
+    return Response({'message': f'{user.username} removed from Manager group'}, status=200)
+
+"""
+    delivery_crew: Handles GET and POST for delivery crew group
+        - Checks if user is manager or superuser first, if not returns 403
+        - GET: Returns list of all delivery crew
+        - POST: Adds a user to the delivery crew group by username
+
+    delivery_crew_detail: Handles DELETE for delivery crew group
+        - Checks if user is manager or superuser first, if not returns 403
+        - Removes a user from the delivery crew group by their ID
+"""
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def delivery_crew(request):
+    if not is_manager(request.user) and not request.user.is_superuser:
+        return Response({'message': 'Forbidden'}, status=403)
+
+    delivery_group = Group.objects.get(name='Delivery crew')
+
+    if request.method == 'GET':
+        crew = User.objects.filter(groups=delivery_group)
+        serializer = UserSerializer(crew, many=True)
+        return Response(serializer.data)
+
+    if request.method == 'POST':
+        username = request.data.get('username')
+        user = get_object_or_404(User, username=username)
+        delivery_group.user_set.add(user)
+        return Response({'message': f'{username} added to Delivery crew'}, status=201)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delivery_crew_detail(request, pk):
+    if not is_manager(request.user) and not request.user.is_superuser:
+        return Response({'message': 'Forbidden'}, status=403)
+
+    user = get_object_or_404(User, pk=pk)
+    delivery_group = Group.objects.get(name='Delivery crew')
+    delivery_group.user_set.remove(user)
+    return Response({'message': f'{user.username} removed from Delivery crew'}, status=200)

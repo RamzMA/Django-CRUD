@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, MenuItem
+from .models import Category, MenuItem, Cart
 
 #Category serializer
 """
@@ -25,3 +25,28 @@ class MenuItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
         fields = ['id', 'title', 'price', 'featured', 'category', 'category_id']
+
+
+#Cart Serializer
+"""
+    user: HiddenField ensures never sends ID, user is set to whoever is making request
+    super().create(validated_data): Calls parent method to save data to database
+"""
+class CartSerializer(serializers.ModelSerializer):
+    menuitem = MenuItemSerializer(read_only=True)
+    menuitem_id = serializers.IntegerField(write_only=True)
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+
+    def validate_menuitem_id(self, value):
+        try:
+            MenuItem.objects.get(pk=value)
+        except MenuItem.DoesNotExist:
+            raise serializers.ValidationError("Menu Item does not exist!")
+        return value
+    
+    def create(self, validated_data):
+        menuitem = MenuItem.objects.get(pk=validated_data['menuitem_id'])
+        validated_data['unit_price'] = menuitem.price
+        validated_data['price'] = menuitem.price * validated_data['quantity']
+        validated_data['menuitem'] = menuitem
+        return super().create(validated_data)

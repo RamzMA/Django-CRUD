@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 # Catgeory class
 """
@@ -34,3 +35,26 @@ class MenuItem(models.Model):
 
     def __str__(self):
         return self.title
+    
+#Cart class
+"""
+    user: Built in user model for authentification, when user is deleted
+        -models.CASCADE as if user is gone their cart should be gone too
+    menuitem: Foreign key relating to menuitem, when user is gone menuitem in cart should be gone too
+    quantity: Uses SmallIntegerField as it goes up to 32k and no one needs that much items unless ur shaq
+    unit_price: Stores price of item when added to cart incase price is later increased, keeping original price
+    price: For unit_price * quantity 
+    Meta unique_together: Ensures when adding same item 2 times per user it increases quantity and doesnt add item seperately 2 times
+"""
+class Cart(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    menuitem = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
+    quantity = models.SmallIntegerField()
+    unit_price = models.DecimalField(max_digits=6, decimal_places=2)
+    price = models.DecimalField(max_digits=6, decimal_places=2)
+
+    class Meta:
+        unique_together = ('user', 'menuitem')
+
+    def __str__(self):
+        return f"{self.user.username} - {self.menuitem.title}"

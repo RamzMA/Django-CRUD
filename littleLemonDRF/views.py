@@ -1,7 +1,8 @@
-from .models import Category, MenuItem
-from .serializers import CategorySerializer, MenuItemSerializer
+from .models import Category, MenuItem, Cart
+from .serializers import CategorySerializer, MenuItemSerializer, CartSerializer
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.response import Response
 
 """
     Generics: allows for prebuilt GET,POST,EDIT,DELETE with LIST,CREATE,UPDATE,DELETE view
@@ -47,3 +48,23 @@ class SingleItemView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method == 'GET':
             return [IsAuthenticated()]
         return [IsAdminUser()]
+
+#Cart View
+"""
+    permission_classes: As we only need user to be logged in to get their cart and delete from their cart
+    get_queryset: As instead of Cart.objects.all() which gets all carts which is a security risk
+        - We filter for user=self.request.user which is the current user making the request
+    delete: This filters for the user making the request and deletes the cart
+        -returns response and status code
+"""
+class CartView(generics.ListCreateAPIView):
+    serializer_class = CartSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Cart.objects.filter(user=self.request.user)
+    
+    def delete(self, request):
+        Cart.objects.filter(user=request.user).delete()
+        return Response({'Message': 'Cart Cleared'}, status=200)
+    

@@ -1,48 +1,21 @@
-from django.shortcuts import render, get_object_or_404
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
-from .models import Menu, Category
-from .serializers import MenuItemSerializer, CategorySerializer
-from django.http import JsonResponse
-from django.db import IntegrityError
-from django.views.decorators.csrf import csrf_exempt
-from django.forms.models import model_to_dict
+from .models import Category
+from .serializers import CategorySerializer
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 
-# Create your views here.
-@csrf_exempt
-def menu(request):
-    if request.method == 'GET':
-        menu = Menu.objects.all().values()
-        return JsonResponse({'menu': list(menu)})
-    elif request.method == 'POST':
-        title = request.POST.get('title')
-        description = request.POST.get('description')
-        price = request.POST.get('price')
+"""
+    Generics: allows for prebuilt GET,POST,EDIT,DELETE with LIST,CREATE,UPDATE,DELETE view
+    IsAdmin: Built in function to check if user is user.staff
+    IsAuthenticated: Built in function to check if user is logged in
+    Queryset: Tells view what data to work with, for instance Category.objects.all() is all fields of category. Used for GET response.
+    Serializer_class: Tells view what serializer to use to convert data to and from json
+"""
+class CategoryView(generics.ListCreateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
 
-        menu = Menu(title=title,description=description,price=price)
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
-        try:
-            menu.save()
-        except IntegrityError:
-            return JsonResponse({'error': 'true', 'message': 'required field missing'}, status=400)
-        
-        return JsonResponse(model_to_dict(menu), status=201)
-    
-@api_view()
-def menu_items(request):
-    items = Menu.objects.select_related('category').all()
-    serialized_item = MenuItemSerializer(items, many=True)
-    return Response(serialized_item.data)
-
-@api_view()
-def single_item(request, id):
-    items = get_object_or_404(Menu, pk = id)
-    serialized_item = MenuItemSerializer(items)
-    return Response(serialized_item.data)
-
-    
-@api_view()
-def category_detail(request,pk):
-    category = get_object_or_404(Category, pk=pk)
-    serialized_category = CategorySerializer(category)
-    return Response(serialized_category.data)

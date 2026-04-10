@@ -1,8 +1,11 @@
-from .models import Category, MenuItem, Cart
-from .serializers import CategorySerializer, MenuItemSerializer, CartSerializer
+from .models import Category, MenuItem, Cart, Order, OrderItem
+from .serializers import CategorySerializer, MenuItemSerializer, CartSerializer, OrderItemSerializer, OrderSerializer
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from datetime import date
+
 
 """
     Generics: allows for prebuilt GET,POST,EDIT,DELETE with LIST,CREATE,UPDATE,DELETE view
@@ -68,3 +71,127 @@ class CartView(generics.ListCreateAPIView):
         Cart.objects.filter(user=request.user).delete()
         return Response({'Message': 'Cart Cleared'}, status=200)
     
+#Helpers for orders
+"""
+    is_manager: Filters user groups on django to see if manager group is on user
+    is_delivery_crew: Filters user groups on django to see if deliver crew group is on user
+"""
+def is_manager(user):
+    return user.groups.filter(name='Manager').exists()
+
+def is_delivery_crew(user):
+    return user.groups.filter(name='Delivery Crew').exists()
+
+#Orders classes
+"""
+    get_queryset: Gets user then
+        -Checks if user is superuser created by django or is manager determined by helper
+            -returns all orders if either one
+        -Checks if delivery crew
+            -If they are return all orders assigned to them
+        -Otherwise return orders for user
+    serializer: Converts order using OrderSerializer which is then use to return response with seralizer.data
+"""
+class OrderView(generics.ListCreateAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser or is_manager(user):
+            return Order.objects.all()
+        if is_delivery_crew(user):
+            return Order.objects.filter(delivery_crew=user)
+        return Order.objects.filter(user=user)
+    
+    def create(self, request):
+        cart_items = Cart.objects.filter(user=request.user)
+        if not cart_items.exists():
+            return Response({'message': 'Cart is empty'}, status=400)
+        
+        total = sum(item.price for item in cart_items)
+        order = Order.objects.create(
+            user=request.user,
+            total=total,
+            date=date.today(),
+            status=False
+        )
+
+        for item in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                menuitem = item.menuitem,
+                quantity = item.quantity,
+                unit_price = item.unit_price,
+                price = item.price
+            )
+
+        cart_items.delete()
+        serializer = OrderSerializer(order)
+        return Response(serializer.data, status=201)
+
+#SingleOrder View
+"""
+    get_queryset: Same as OrderView, filters what each role can see
+        - Admins and managers see all orders
+        - Delivery crew only see orders assigned to them
+        - Customers only see their own orders
+        This prevents customers accessing other peoples orders
+
+    update: Different roles can update different things
+        - is_delivery_crew: Can only update status to mark as delivered
+            - request.data.get('status', order.status) gets status from request
+              if not provided falls back to current status so it doesnt get wiped
+        - is_manager or superuser: Can assign delivery crew and update status
+            - get_object_or_404 fetches the delivery crew user by their ID
+            - if delivery crew id provided assign them to the order
+        - Anyone else (customer): Gets 403 Forbidden
+
+    delete: Only managers and admins can delete orders
+        - Checks if user is superuser or manager
+        - If neither returns 403 Forbidden
+        - If allowed calls super().delete() which is the parent class delete method
+          passing *args and **kwargs along with it
+
+    get_object(): Built in DRF method that fetches single object based on pk in URL
+        - Uses get_queryset so customers cant access other peoples orders
+        - Returns 404 if object not found in queryset
+"""
+class SingleOrderView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser or is_manager(user):
+            return Order.objects.all()
+        if is_delivery_crew(user):
+            return Order.objects.filter(delivery_crew=user)
+        return Order.objects.filter(user=user)
+    
+    def update(self, request, *args, **kwargs):
+        order = self.get_object()
+        user = request.user
+
+        if is_delivery_crew(user):
+            order.status = request.data.get('status', order.status)
+            order.save()
+            return Response({'message': 'Order status updated'})
+        
+        if is_manager(user) or user.is_superuser:
+            delivery_crew_id = request.data.get('delivery_crew')
+            if delivery_crew_id:
+                crew = get_object_or_404(User, pk=delivery_crew_id)
+                order.delivery_crew = crew
+            order.status = request.data.get('status', order.status)
+            order.save()
+            serializer = OrderSerializer(order)
+            return Response(serializer.data)
+
+        return Response({'message': 'Forbidden'}, status=403) 
+    
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_superuser and not is_manager(request.user):
+            return Response({'message': 'Forbidden'}, status=403)
+        return super().delete(request, *args, **kwargs)
+

@@ -58,3 +58,43 @@ class Cart(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.menuitem.title}"
+    
+#Order class
+"""
+    user: If user is deleted delete order aswell, therefore CASCADE
+    delivery_crew: Due to user already being a foreign key assigned to User
+        -You must implement related_name to distinguish 
+        -on_delete=models.SET_NULL: Does not delete order instead sets to null, null by default
+    date: The date, self explanitory 
+"""
+class Order(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    delivery_crew = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='delivery_crew'
+    )
+    status = models.BooleanField(default=False, db_index=True)
+    total = models.DecimalField(max_digits=6, decimal_places=2)
+    date = models.DateField(db_index=True)
+
+    def __str__(self):
+        return f"Order {self.id} by {self.user.username}"
+
+#Order Item class
+"""
+    unique_together: Like before, means that same menuitem cannot apprear 2 times in order seperately
+"""
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    menuitem = models.ForeignKey(MenuItem, on_delete=models.CASCADE)
+    quantity = models.SmallIntegerField()
+    unit_price = models.DecimalField(max_digits=6, decimal_places=2)
+    price = models.DecimalField(max_digits=6, decimal_places=2)
+
+    class Meta:
+        unique_together = ('order', 'menuitem')
+
+    def __str__(self):
+        return f"{self.menuitem.title} In Order {self.order.id}"

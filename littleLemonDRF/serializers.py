@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Category, MenuItem, Cart
+from .models import Category, MenuItem, Cart, Order, OrderItem
+from django.contrib.auth.models import User
 
 #Category serializer
 """
@@ -37,6 +38,11 @@ class CartSerializer(serializers.ModelSerializer):
     menuitem_id = serializers.IntegerField(write_only=True)
     user = serializers.HiddenField(default=serializers.CurrentUserDefault())
 
+    class Meta:
+        model = Cart
+        fields = ['id', 'user', 'menuitem', 'menuitem_id', 'quantity', 'unit_price', 'price']
+        read_only_fields = ['unit_price', 'price']
+
     def validate_menuitem_id(self, value):
         try:
             MenuItem.objects.get(pk=value)
@@ -50,3 +56,25 @@ class CartSerializer(serializers.ModelSerializer):
         validated_data['price'] = menuitem.price * validated_data['quantity']
         validated_data['menuitem'] = menuitem
         return super().create(validated_data)
+    
+#User Class
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id','username','email']
+
+#Order Class
+class OrderItemSerializer(serializers.ModelSerializer):
+    menuitem = MenuItemSerializer(read_only=True)
+
+    class Meta:
+        model = OrderItem
+        fields = ['id', 'menuitem', 'quantity', 'unit_price', 'price']
+
+class OrderSerializer(serializers.ModelSerializer):
+    orderitems = OrderItemSerializer(many=True, read_only=True, source='orderitem_set')
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Order
+        fields = ['id', 'user', 'delivery_crew', 'status', 'total', 'date', 'orderitems']
